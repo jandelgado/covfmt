@@ -68,13 +68,27 @@ func lcov(blocks map[string][]*block, f io.Writer) {
 	w.Flush()
 }
 
+// Format being parsed is:
+//   name.go:line.column,line.column numberOfStatements count
+// e.g.
+//   github.com/jandelgado/golang-ci-template/main.go:6.14,8.2 1 1
+
 func parseCoverageLine(line string) (string, *block, bool) {
-	if line == "mode: set" {
+	if strings.HasPrefix(line, "mode:") {
 		return "", nil, false
 	}
 	path := strings.Split(line, ":")
+	if len(path) != 2 {
+		return "", nil, false
+	}
 	parts := strings.Split(path[1], " ")
+	if len(parts) != 3 {
+		return "", nil, false
+	}
 	sections := strings.Split(parts[0], ",")
+	if len(sections) != 2 {
+		return "", nil, false
+	}
 	start := strings.Split(sections[0], ".")
 	end := strings.Split(sections[1], ".")
 	// Populate the block.
@@ -85,8 +99,7 @@ func parseCoverageLine(line string) (string, *block, bool) {
 	b.endChar, _ = strconv.Atoi(end[1])
 	b.statements, _ = strconv.Atoi(parts[1])
 	b.covered, _ = strconv.Atoi(parts[2])
-	// Remove the underscore (_) from the beginning of the path.
-	return path[0][1:], b, true
+	return path[0], b, true
 }
 
 func parseCoverage(coverage io.Reader) map[string][]*block {
