@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"flag"
 	"fmt"
 	"go/build"
@@ -33,19 +34,17 @@ var pkgCache = map[string]cacheResult{}
 
 func findFile(file string) (string, error) {
 	dir, file := filepath.Split(file)
-	if cached, ok := pkgCache[dir]; ok {
-		return cached.file, cached.err
-	}
-
 	var result cacheResult
-	pkg, err := build.Import(dir, ".", build.FindOnly)
-	if err != nil {
-		err = fmt.Errorf("can't find %q: %v", file, err)
-		result = cacheResult{"", err}
-	} else {
-		result = cacheResult{filepath.Join(pkg.Dir, file), nil}
+	var ok bool
+	if result, ok = pkgCache[file]; !ok {
+		pkg, err := build.Import(dir, ".", build.FindOnly)
+		if err == nil {
+			result = cacheResult{filepath.Join(pkg.Dir, file), nil}
+		} else {
+			result = cacheResult{"", err}
+		}
+		pkgCache[file] = result
 	}
-	pkgCache[dir] = result
 	return result.file, result.err
 }
 
@@ -126,21 +125,18 @@ func lcov(blocks map[string][]*block, f io.Writer) {
 // e.g.
 //   github.com/jandelgado/golang-ci-template/main.go:6.14,8.2 1 1
 
-func parseCoverageLine(line string) (string, *block, bool) {
-	if strings.HasPrefix(line, "mode:") {
-		return "", nil, false
-	}
+func parseCoverageLine(line string) (string, *block, error) {
 	path := strings.Split(line, ":")
 	if len(path) != 2 {
-		return "", nil, false
+		return "", nil, errors.New("unexpected format (path sep): " + line)
 	}
 	parts := strings.Split(path[1], " ")
 	if len(parts) != 3 {
-		return "", nil, false
+		return "", nil, errors.New("unexpected format (parts): " + line)
 	}
 	sections := strings.Split(parts[0], ",")
 	if len(sections) != 2 {
-		return "", nil, false
+		return "", nil, errors.New("unexpected format (pos): " + line)
 	}
 	start := strings.Split(sections[0], ".")
 	end := strings.Split(sections[1], ".")
@@ -152,24 +148,33 @@ func parseCoverageLine(line string) (string, *block, bool) {
 	b.endChar, _ = strconv.Atoi(end[1])
 	b.statements, _ = strconv.Atoi(parts[1])
 	b.covered, _ = strconv.Atoi(parts[2])
-	f, err := findFile(path[0])
-	if err != nil {
-		return "", nil, false
-	}
-	return getCoverallsSourceFileName(f), b, true
+	return path[0], b, nil
 }
 
 func parseCoverage(coverage io.Reader) map[string][]*block {
 	scanner := bufio.NewScanner(coverage)
 	blocks := map[string][]*block{}
 	for scanner.Scan() {
-		if f, b, ok := parseCoverageLine(scanner.Text()); ok {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "mode:") {
+			continue
+		}
+		if f, b, err := parseCoverageLine(line); err == nil {
+			f, err := findFile(f)
+			if err != nil {
+				log.Printf("%v", err)
+				continue
+			}
+			f = getCoverallsSourceFileName(f)
 			// Make sure the filePath is a key in the map.
 			if _, ok := blocks[f]; ok == false {
 				blocks[f] = []*block{}
 			}
 			blocks[f] = append(blocks[f], b)
+		} else {
+			log.Printf("%v", err)
 		}
+
 	}
 	if err := scanner.Err(); err != nil {
 		log.Fatal(scanner.Err())
