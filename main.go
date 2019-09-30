@@ -183,6 +183,7 @@ func parseCoverage(coverage io.Reader) map[string][]*block {
 }
 
 func main() {
+	log.Println("covfmt started")
 	infileName := flag.String("infile", "", "go coverage file to read, default: stdin")
 	outfileName := flag.String("outfile", "", "lcov file to write, default: stdout")
 
@@ -215,4 +216,6 @@ func main() {
 	}
 
 	lcov(parseCoverage(infile), outfile)
+
+	log.Println("covfmt done")
 }
