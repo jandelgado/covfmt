@@ -2,6 +2,8 @@ package main
 
 import (
 	"bufio"
+	"fmt"
+	"go/build"
 	"io"
 	"log"
 	"os"
@@ -20,6 +22,31 @@ type block struct {
 }
 
 var vscDirs = []string{".git", ".hg", ".bzr", ".svn"}
+
+type cacheResult struct {
+	file string
+	err  error
+}
+
+var pkgCache = map[string]cacheResult{}
+
+func findFile(file string) (string, error) {
+	dir, file := filepath.Split(file)
+	if cached, ok := pkgCache[dir]; ok {
+		return cached.file, cached.err
+	}
+
+	var result cacheResult
+	pkg, err := build.Import(dir, ".", build.FindOnly)
+	if err != nil {
+		err = fmt.Errorf("can't find %q: %v", file, err)
+		result = cacheResult{"", err}
+	} else {
+		result = cacheResult{filepath.Join(pkg.Dir, file), nil}
+	}
+	pkgCache[dir] = result
+	return result.file, result.err
+}
 
 func findRepositoryRoot(dir string) (string, bool) {
 	for _, vcsdir := range vscDirs {
@@ -124,7 +151,11 @@ func parseCoverageLine(line string) (string, *block, bool) {
 	b.endChar, _ = strconv.Atoi(end[1])
 	b.statements, _ = strconv.Atoi(parts[1])
 	b.covered, _ = strconv.Atoi(parts[2])
-	return getCoverallsSourceFileName(path[0]), b, true
+	f, err := findFile(path[0])
+	if err != nil {
+		return "", nil, false
+	}
+	return getCoverallsSourceFileName(f), b, true
 }
 
 func parseCoverage(coverage io.Reader) map[string][]*block {
