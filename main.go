@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"flag"
 	"fmt"
 	"go/build"
 	"io"
@@ -177,5 +178,36 @@ func parseCoverage(coverage io.Reader) map[string][]*block {
 }
 
 func main() {
-	lcov(parseCoverage(os.Stdin), os.Stdout)
+	infileName := flag.String("coverin", "", "If supplied, use a go cover profile (comma separated)")
+	outfileName := flag.String("lcovout", "", "If supplied, use a go cover profile (comma separated)")
+
+	flag.Parse()
+	if len(flag.Args()) > 0 {
+		cmd := os.Args[0]
+		s := "Usage: %s [options]\n"
+		fmt.Fprintf(os.Stderr, s, cmd)
+		flag.PrintDefaults()
+		//	flag.Usage()
+		os.Exit(1)
+	}
+
+	infile := os.Stdin
+	outfile := os.Stdout
+	var err error
+	if *infileName != "" {
+		infile, err = os.Open(*infileName)
+		if err != nil {
+			panic(err)
+		}
+		defer infile.Close()
+	}
+	if *outfileName != "" {
+		outfile, err = os.Create(*outfileName)
+		if err != nil {
+			panic(err)
+		}
+		defer outfile.Close()
+	}
+
+	lcov(parseCoverage(infile), outfile)
 }
