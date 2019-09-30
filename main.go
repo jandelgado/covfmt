@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -16,6 +17,30 @@ type block struct {
 	endChar    int
 	statements int
 	covered    int
+}
+
+var vscDirs = []string{".git", ".hg", ".bzr", ".svn"}
+
+func findRepositoryRoot(dir string) (string, bool) {
+	for _, vcsdir := range vscDirs {
+		if d, err := os.Stat(filepath.Join(dir, vcsdir)); err == nil && d.IsDir() {
+			return dir, true
+		}
+	}
+	nextdir := filepath.Dir(dir)
+	if nextdir == dir {
+		return "", false
+	}
+	return findRepositoryRoot(nextdir)
+}
+
+func getCoverallsSourceFileName(name string) string {
+	if dir, ok := findRepositoryRoot(name); !ok {
+		return name
+	} else {
+		filename := strings.TrimPrefix(name, dir+string(os.PathSeparator))
+		return filename
+	}
 }
 
 func writeLcovRecord(filePath string, blocks []*block, w *bufio.Writer) {
@@ -99,7 +124,7 @@ func parseCoverageLine(line string) (string, *block, bool) {
 	b.endChar, _ = strconv.Atoi(end[1])
 	b.statements, _ = strconv.Atoi(parts[1])
 	b.covered, _ = strconv.Atoi(parts[2])
-	return path[0], b, true
+	return getCoverallsSourceFileName(path[0]), b, true
 }
 
 func parseCoverage(coverage io.Reader) map[string][]*block {
