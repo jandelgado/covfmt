@@ -178,8 +178,8 @@ func parseCoverage(coverage io.Reader) map[string][]*block {
 }
 
 func main() {
-	infileName := flag.String("coverin", "", "If supplied, use a go cover profile (comma separated)")
-	outfileName := flag.String("lcovout", "", "If supplied, use a go cover profile (comma separated)")
+	infileName := flag.String("infile", "", "go coverage file to read, default: stdin")
+	outfileName := flag.String("outfile", "", "lcov file to write, default: stdout")
 
 	flag.Parse()
 	if len(flag.Args()) > 0 {
